@@ -4,6 +4,7 @@ import time
 import urllib.request
 import urllib.parse
 import sys
+import os
 from datetime import datetime
 
 from telegram import Update
@@ -14,7 +15,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 # CRYPTO RADAR V5
 # ============================================================
 
-TOKEN = "..."
+TOKEN = os.getenv("TELEGRAM_TOKEN","")
 
 # Tarama ayarlari
 SCAN_MINUTES = 5
