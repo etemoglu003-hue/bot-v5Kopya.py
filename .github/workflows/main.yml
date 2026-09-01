@@ -28,4 +28,4 @@ jobs:
           pip install python-telegram-bot
 
       - name: Run Crypto Radar V5
-        run: python main.py
+        run: python bot-v5Kopya.py
