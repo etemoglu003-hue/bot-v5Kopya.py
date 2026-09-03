@@ -11,10 +11,16 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 
+# ============================================================
+# AYARLAR
+# ============================================================
+
 TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
 
 SCAN_MINUTES = 5
-MAX_COINS = 50
+
+# Daha hızlı tarama için 15 coin
+MAX_COINS = 15
 
 ALERT_COOLDOWN = 30 * 60
 ALERT_SCORE = 70
@@ -24,38 +30,84 @@ TARGET_2_ATR = 2.0
 TARGET_3_ATR = 3.0
 STOP_ATR = 1.2
 
+BINANCE_BASE = "https://fapi.binance.com"
+
+
+# ============================================================
+# TERMINAL YAZDIRMA
+# ============================================================
 
 try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(
+        encoding="utf-8",
+        errors="replace"
+    )
+
+    sys.stderr.reconfigure(
+        encoding="utf-8",
+        errors="replace"
+    )
+
 except Exception:
     pass
 
 
 def safe_print(*args):
+
     try:
-        print(*args)
+        print(*args, flush=True)
+
     except Exception:
+
         try:
-            text = " ".join(str(x) for x in args)
-            print(text.encode("ascii", "replace").decode("ascii"))
+
+            text = " ".join(
+                str(x)
+                for x in args
+            )
+
+            print(
+                text.encode(
+                    "ascii",
+                    "replace"
+                ).decode("ascii"),
+                flush=True
+            )
+
         except Exception:
             pass
 
 
+# ============================================================
+# GLOBAL DEGISKENLER
+# ============================================================
+
 last_alerts = {}
 previous_oi = {}
 
-TARGET_CHAT_ID = os.getenv("TARGET_CHAT_ID", "@realistcoinman").strip() or None
+# GitHub Secret bos olsa bile kanal adresini kullan
+TARGET_CHAT_ID = (
+    os.getenv(
+        "TARGET_CHAT_ID",
+        ""
+    ).strip()
+    or
+    "@realistcoinman"
+)
+
 last_hour_report = -1
 
 scanner_running = False
 
-BINANCE_BASE = "https://fapi.binance.com"
 
+# ============================================================
+# BINANCE JSON
+# ============================================================
 
 def get_json(url):
+
     try:
+
         url = str(url).strip()
 
         request = urllib.request.Request(
@@ -67,7 +119,7 @@ def get_json(url):
 
         with urllib.request.urlopen(
             request,
-            timeout=15
+            timeout=5
         ) as response:
 
             raw_data = response.read()
@@ -86,23 +138,44 @@ def get_json(url):
         return None
 
 
+# ============================================================
+# BINANCE TEST
+# ============================================================
+
 def test_binance():
 
-    url = BINANCE_BASE + "/fapi/v1/ping"
+    url = (
+        BINANCE_BASE
+        + "/fapi/v1/ping"
+    )
 
     data = get_json(url)
 
     if data is not None:
-        safe_print("Binance baglantisi OK.")
+
+        safe_print(
+            "Binance baglantisi OK."
+        )
+
         return True
 
-    safe_print("Binance baglantisi BASARISIZ.")
+    safe_print(
+        "Binance baglantisi BASARISIZ."
+    )
+
     return False
 
 
+# ============================================================
+# COIN LISTESI
+# ============================================================
+
 def get_symbols():
 
-    url = BINANCE_BASE + "/fapi/v1/exchangeInfo"
+    url = (
+        BINANCE_BASE
+        + "/fapi/v1/exchangeInfo"
+    )
 
     data = get_json(url)
 
@@ -111,17 +184,27 @@ def get_symbols():
 
     symbols = []
 
-    for item in data.get("symbols", []):
+    for item in data.get(
+        "symbols",
+        []
+    ):
 
         try:
 
             if (
-                item.get("status") == "TRADING"
-                and item.get("quoteAsset") == "USDT"
-                and item.get("contractType") == "PERPETUAL"
+                item.get("status")
+                == "TRADING"
+                and
+                item.get("quoteAsset")
+                == "USDT"
+                and
+                item.get("contractType")
+                == "PERPETUAL"
             ):
 
-                symbols.append(item["symbol"])
+                symbols.append(
+                    item["symbol"]
+                )
 
         except Exception:
             continue
@@ -129,12 +212,23 @@ def get_symbols():
     return symbols
 
 
+# ============================================================
+# TICKER
+# ============================================================
+
 def get_tickers():
 
-    url = BINANCE_BASE + "/fapi/v1/ticker/24hr"
+    url = (
+        BINANCE_BASE
+        + "/fapi/v1/ticker/24hr"
+    )
 
     return get_json(url)
 
+
+# ============================================================
+# KLINE
+# ============================================================
 
 def get_klines(symbol):
 
@@ -154,6 +248,10 @@ def get_klines(symbol):
 
     return get_json(url)
 
+
+# ============================================================
+# OPEN INTEREST
+# ============================================================
 
 def get_oi(symbol):
 
@@ -175,10 +273,19 @@ def get_oi(symbol):
         return None
 
     try:
-        return float(data["openInterest"])
+
+        return float(
+            data["openInterest"]
+        )
+
     except Exception:
+
         return None
 
+
+# ============================================================
+# LONG SHORT
+# ============================================================
 
 def get_long_short(symbol):
 
@@ -206,14 +313,25 @@ def get_long_short(symbol):
         result = data[0]
 
         return {
-            "long": float(result["longAccount"]),
-            "short": float(result["shortAccount"]),
-            "ratio": float(result["longShortRatio"])
+            "long": float(
+                result["longAccount"]
+            ),
+            "short": float(
+                result["shortAccount"]
+            ),
+            "ratio": float(
+                result["longShortRatio"]
+            )
         }
 
     except Exception:
+
         return None
 
+
+# ============================================================
+# FUNDING
+# ============================================================
 
 def get_funding(symbol):
 
@@ -235,57 +353,110 @@ def get_funding(symbol):
         return None
 
     try:
-        return float(data["lastFundingRate"])
+
+        return float(
+            data["lastFundingRate"]
+        )
+
     except Exception:
+
         return None
 
 
-def calculate_atr(klines, period=14):
+# ============================================================
+# ATR
+# ============================================================
+
+def calculate_atr(
+    klines,
+    period=14
+):
 
     if len(klines) < period + 1:
         return None
 
     true_ranges = []
 
-    for i in range(1, len(klines)):
+    for i in range(
+        1,
+        len(klines)
+    ):
 
         try:
 
-            high = float(klines[i][2])
-            low = float(klines[i][3])
-            previous_close = float(klines[i - 1][4])
+            high = float(
+                klines[i][2]
+            )
+
+            low = float(
+                klines[i][3]
+            )
+
+            previous_close = float(
+                klines[i - 1][4]
+            )
 
             true_range = max(
                 high - low,
-                abs(high - previous_close),
-                abs(low - previous_close)
+                abs(
+                    high
+                    -
+                    previous_close
+                ),
+                abs(
+                    low
+                    -
+                    previous_close
+                )
             )
 
-            true_ranges.append(true_range)
+            true_ranges.append(
+                true_range
+            )
 
         except Exception:
+
             continue
 
     if not true_ranges:
         return None
 
     return (
-        sum(true_ranges[-period:])
+        sum(
+            true_ranges[-period:]
+        )
         /
-        min(period, len(true_ranges))
+        min(
+            period,
+            len(true_ranges)
+        )
     )
 
 
-def analyze_coin(symbol, ticker):
+# ============================================================
+# COIN ANALIZ
+# ============================================================
+
+def analyze_coin(
+    symbol,
+    ticker
+):
 
     global previous_oi
 
     try:
 
-        price = float(ticker["lastPrice"])
-        change_24h = float(ticker["priceChangePercent"])
+        price = float(
+            ticker["lastPrice"]
+        )
 
-        klines = get_klines(symbol)
+        change_24h = float(
+            ticker["priceChangePercent"]
+        )
+
+        klines = get_klines(
+            symbol
+        )
 
         if not klines:
             return None
@@ -306,7 +477,11 @@ def analyze_coin(symbol, ticker):
         old_15m = closes[-2]
 
         price_change_15m = (
-            (price - old_15m)
+            (
+                price
+                -
+                old_15m
+            )
             /
             old_15m
         ) * 100
@@ -314,7 +489,11 @@ def analyze_coin(symbol, ticker):
         old_1h = closes[-5]
 
         price_change_1h = (
-            (price - old_1h)
+            (
+                price
+                -
+                old_1h
+            )
             /
             old_1h
         ) * 100
@@ -322,19 +501,29 @@ def analyze_coin(symbol, ticker):
         old_4h = closes[-17]
 
         price_change_4h = (
-            (price - old_4h)
+            (
+                price
+                -
+                old_4h
+            )
             /
             old_4h
         ) * 100
 
-        previous_volumes = volumes[-9:-1]
+        previous_volumes = (
+            volumes[-9:-1]
+        )
 
         if previous_volumes:
 
             avg_volume = (
-                sum(previous_volumes)
+                sum(
+                    previous_volumes
+                )
                 /
-                len(previous_volumes)
+                len(
+                    previous_volumes
+                )
             )
 
         else:
@@ -364,18 +553,23 @@ def analyze_coin(symbol, ticker):
             14
         )
 
-        oi = get_oi(symbol)
+        oi = get_oi(
+            symbol
+        )
 
         oi_change = 0
         oi_available = False
 
         if oi is not None:
 
-            old_oi = previous_oi.get(symbol)
+            old_oi = previous_oi.get(
+                symbol
+            )
 
             if (
                 old_oi is not None
-                and old_oi > 0
+                and
+                old_oi > 0
             ):
 
                 oi_change = (
@@ -392,61 +586,83 @@ def analyze_coin(symbol, ticker):
 
             previous_oi[symbol] = oi
 
-        ls = get_long_short(symbol)
+        ls = get_long_short(
+            symbol
+        )
 
-        funding = get_funding(symbol)
+        funding = get_funding(
+            symbol
+        )
 
         score = 0
 
         reasons = []
 
-        if abs(price_change_15m) >= 3:
+        # 15M
+        if abs(
+            price_change_15m
+        ) >= 3:
 
             score += 30
 
             reasons.append(
                 "15M guclu hareket: "
-                + f"{price_change_15m:+.2f}%"
+                +
+                f"{price_change_15m:+.2f}%"
             )
 
-        elif abs(price_change_15m) >= 2:
+        elif abs(
+            price_change_15m
+        ) >= 2:
 
             score += 20
 
             reasons.append(
                 "15M hareket: "
-                + f"{price_change_15m:+.2f}%"
+                +
+                f"{price_change_15m:+.2f}%"
             )
 
-        elif abs(price_change_15m) >= 1:
+        elif abs(
+            price_change_15m
+        ) >= 1:
 
             score += 10
 
-        if abs(price_change_1h) >= 6:
+        # 1H
+        if abs(
+            price_change_1h
+        ) >= 6:
 
             score += 25
 
             reasons.append(
                 "1H guclu momentum: "
-                + f"{price_change_1h:+.2f}%"
+                +
+                f"{price_change_1h:+.2f}%"
             )
 
-        elif abs(price_change_1h) >= 3:
+        elif abs(
+            price_change_1h
+        ) >= 3:
 
             score += 15
 
             reasons.append(
                 "1H momentum: "
-                + f"{price_change_1h:+.2f}%"
+                +
+                f"{price_change_1h:+.2f}%"
             )
 
+        # HACIM
         if volume_change >= 150:
 
             score += 25
 
             reasons.append(
                 "Hacim patlamasi: "
-                + f"+{volume_change:.0f}%"
+                +
+                f"+{volume_change:.0f}%"
             )
 
         elif volume_change >= 100:
@@ -455,28 +671,36 @@ def analyze_coin(symbol, ticker):
 
             reasons.append(
                 "Hacim artisi: "
-                + f"+{volume_change:.0f}%"
+                +
+                f"+{volume_change:.0f}%"
             )
 
         elif volume_change >= 50:
 
             score += 10
 
+        # OI
         if oi_available:
 
-            if abs(oi_change) >= 5:
+            if abs(
+                oi_change
+            ) >= 5:
 
                 score += 20
 
                 reasons.append(
                     "OI degisimi: "
-                    + f"{oi_change:+.2f}%"
+                    +
+                    f"{oi_change:+.2f}%"
                 )
 
-            elif abs(oi_change) >= 2:
+            elif abs(
+                oi_change
+            ) >= 2:
 
                 score += 10
 
+        # LONG SHORT
         if ls:
 
             ratio = ls["ratio"]
@@ -487,7 +711,8 @@ def analyze_coin(symbol, ticker):
 
                 reasons.append(
                     "Long agirligi: "
-                    + f"{ratio:.2f}"
+                    +
+                    f"{ratio:.2f}"
                 )
 
             elif ratio <= 0.67:
@@ -496,9 +721,11 @@ def analyze_coin(symbol, ticker):
 
                 reasons.append(
                     "Short agirligi: "
-                    + f"{ratio:.2f}"
+                    +
+                    f"{ratio:.2f}"
                 )
 
+        # YON
         if price_change_15m >= 0:
 
             direction = "YUKSELIS"
@@ -507,9 +734,11 @@ def analyze_coin(symbol, ticker):
 
             direction = "DUSUS"
 
+        # PIYASA YORUMU
         if (
             price_change_15m > 0
-            and oi_change > 2
+            and
+            oi_change > 2
         ):
 
             market_comment = (
@@ -520,7 +749,8 @@ def analyze_coin(symbol, ticker):
 
         elif (
             price_change_15m > 0
-            and oi_change < -2
+            and
+            oi_change < -2
         ):
 
             market_comment = (
@@ -530,7 +760,8 @@ def analyze_coin(symbol, ticker):
 
         elif (
             price_change_15m < 0
-            and oi_change > 2
+            and
+            oi_change > 2
         ):
 
             market_comment = (
@@ -541,7 +772,8 @@ def analyze_coin(symbol, ticker):
 
         elif (
             price_change_15m < 0
-            and oi_change < -2
+            and
+            oi_change < -2
         ):
 
             market_comment = (
@@ -556,6 +788,7 @@ def analyze_coin(symbol, ticker):
                 "bir dogrulama yok."
             )
 
+        # HEDEF / STOP
         target1 = None
         target2 = None
         target3 = None
@@ -565,17 +798,55 @@ def analyze_coin(symbol, ticker):
 
             if price_change_15m >= 0:
 
-                target1 = price + atr * TARGET_1_ATR
-                target2 = price + atr * TARGET_2_ATR
-                target3 = price + atr * TARGET_3_ATR
-                stop = price - atr * STOP_ATR
+                target1 = (
+                    price
+                    +
+                    atr * TARGET_1_ATR
+                )
+
+                target2 = (
+                    price
+                    +
+                    atr * TARGET_2_ATR
+                )
+
+                target3 = (
+                    price
+                    +
+                    atr * TARGET_3_ATR
+                )
+
+                stop = (
+                    price
+                    -
+                    atr * STOP_ATR
+                )
 
             else:
 
-                target1 = price - atr * TARGET_1_ATR
-                target2 = price - atr * TARGET_2_ATR
-                target3 = price - atr * TARGET_3_ATR
-                stop = price + atr * STOP_ATR
+                target1 = (
+                    price
+                    -
+                    atr * TARGET_1_ATR
+                )
+
+                target2 = (
+                    price
+                    -
+                    atr * TARGET_2_ATR
+                )
+
+                target3 = (
+                    price
+                    -
+                    atr * TARGET_3_ATR
+                )
+
+                stop = (
+                    price
+                    +
+                    atr * STOP_ATR
+                )
 
         return {
 
@@ -596,7 +867,10 @@ def analyze_coin(symbol, ticker):
             "target2": target2,
             "target3": target3,
             "stop": stop,
-            "score": min(score, 100),
+            "score": min(
+                score,
+                100
+            ),
             "direction": direction,
             "market_comment": market_comment,
             "reasons": reasons
@@ -613,19 +887,29 @@ def analyze_coin(symbol, ticker):
         return None
 
 
+# ============================================================
+# FIYAT FORMAT
+# ============================================================
+
 def format_price(price):
 
     if price is None:
         return "Bilinmiyor"
 
     if price >= 1:
+
         return f"{price:,.4f}"
 
     if price >= 0.01:
+
         return f"{price:.5f}"
 
     return f"{price:.8f}"
 
+
+# ============================================================
+# ALARM MESAJI
+# ============================================================
 
 def create_alert(result):
 
@@ -658,6 +942,10 @@ def create_alert(result):
         "• " + x
         for x in result["reasons"]
     )
+
+    if not reasons:
+
+        reasons = "• Teknik hareket mevcut"
 
     return (
         "🚨 CRYPTO RADAR V5\n"
@@ -695,6 +983,10 @@ def create_alert(result):
     )
 
 
+# ============================================================
+# SAATLIK RAPOR
+# ============================================================
+
 def create_hourly_report(results):
 
     results = sorted(
@@ -719,8 +1011,11 @@ def create_hourly_report(results):
     ):
 
         if result["direction"] == "YUKSELIS":
+
             direction = "🟢 YUKSELIS"
+
         else:
+
             direction = "🔴 DUSUS"
 
         message += (
@@ -744,15 +1039,21 @@ def create_hourly_report(results):
 
         if result["score"] >= 80:
 
-            message += "🚨 Cok guclu hareket\n"
+            message += (
+                "🚨 Cok guclu hareket\n"
+            )
 
         elif result["score"] >= 70:
 
-            message += "🔥 Guclu hareket\n"
+            message += (
+                "🔥 Guclu hareket\n"
+            )
 
         elif result["score"] >= 60:
 
-            message += "🟡 Izlenmeli\n"
+            message += (
+                "🟡 Izlenmeli\n"
+            )
 
     message += (
         "\n━━━━━━━━━━━━━━━━━━\n"
@@ -772,19 +1073,34 @@ def create_hourly_report(results):
     return message
 
 
+# ============================================================
+# PIYASA TARAMA
+# ============================================================
+
 async def scan_market(application):
 
     global last_alerts
 
-    safe_print("========================================")
-    safe_print("PIYASA TARAMASI BASLADI")
-    safe_print("========================================")
+    safe_print(
+        "========================================"
+    )
+
+    safe_print(
+        "PIYASA TARAMASI BASLADI"
+    )
+
+    safe_print(
+        "========================================"
+    )
 
     symbols = get_symbols()
 
     if not symbols:
 
-        safe_print("Coin listesi alinamadi.")
+        safe_print(
+            "Coin listesi alinamadi."
+        )
+
         return []
 
     safe_print(
@@ -796,7 +1112,10 @@ async def scan_market(application):
 
     if not tickers:
 
-        safe_print("Ticker verisi alinamadi.")
+        safe_print(
+            "Ticker verisi alinamadi."
+        )
+
         return []
 
     ticker_map = {
@@ -809,7 +1128,9 @@ async def scan_market(application):
 
     for symbol in symbols:
 
-        ticker = ticker_map.get(symbol)
+        ticker = ticker_map.get(
+            symbol
+        )
 
         if not ticker:
             continue
@@ -818,12 +1139,16 @@ async def scan_market(application):
 
             change = abs(
                 float(
-                    ticker["priceChangePercent"]
+                    ticker[
+                        "priceChangePercent"
+                    ]
                 )
             )
 
             volume = float(
-                ticker["quoteVolume"]
+                ticker[
+                    "quoteVolume"
+                ]
             )
 
             candidates.append(
@@ -836,6 +1161,7 @@ async def scan_market(application):
             )
 
         except Exception:
+
             continue
 
     candidates.sort(
@@ -846,7 +1172,9 @@ async def scan_market(application):
         reverse=True
     )
 
-    candidates = candidates[:MAX_COINS]
+    candidates = candidates[
+        :MAX_COINS
+    ]
 
     safe_print(
         "Analiz edilecek coin:",
@@ -878,20 +1206,27 @@ async def scan_market(application):
         if not result:
             continue
 
-        results.append(result)
+        results.append(
+            result
+        )
 
         price_strong = (
-            abs(result["change_15m"]) >= 2
+            abs(
+                result["change_15m"]
+            ) >= 2
         )
 
         volume_strong = (
-            result["volume_change"] >= 50
+            result["volume_change"]
+            >= 50
         )
 
         oi_strong = (
             result["oi_available"]
             and
-            abs(result["oi_change"]) >= 2
+            abs(
+                result["oi_change"]
+            ) >= 2
         )
 
         confirmations = sum(
@@ -903,9 +1238,12 @@ async def scan_market(application):
         )
 
         if (
-            result["score"] >= ALERT_SCORE
-            and price_strong
-            and confirmations >= 2
+            result["score"]
+            >= ALERT_SCORE
+            and
+            price_strong
+            and
+            confirmations >= 2
         ):
 
             now = time.time()
@@ -922,17 +1260,22 @@ async def scan_market(application):
 
             if (
                 cooldown_ok
-                and TARGET_CHAT_ID is not None
+                and
+                TARGET_CHAT_ID
             ):
 
                 try:
 
                     await application.bot.send_message(
                         chat_id=TARGET_CHAT_ID,
-                        text=create_alert(result)
+                        text=create_alert(
+                            result
+                        )
                     )
 
-                    last_alerts[symbol] = now
+                    last_alerts[
+                        symbol
+                    ] = now
 
                     safe_print(
                         "ALARM GONDERILDI:",
@@ -943,28 +1286,47 @@ async def scan_market(application):
 
                     safe_print(
                         "Telegram alarm hatasi:",
-                        type(e).__name__
+                        type(e).__name__,
+                        str(e)
                     )
 
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(
+            0.15
+        )
 
-    safe_print("========================================")
+    safe_print(
+        "========================================"
+    )
+
     safe_print(
         "TARAMA TAMAMLANDI:",
         len(results),
         "coin"
     )
-    safe_print("========================================")
+
+    safe_print(
+        "========================================"
+    )
 
     return results
 
 
-async def background_scanner(application):
+# ============================================================
+# ARKA PLAN TARAMA
+# ============================================================
+
+async def background_scanner(
+    application
+):
 
     global last_hour_report
     global scanner_running
 
     scanner_running = True
+
+    safe_print(
+        "ARKA PLAN TARAMA SISTEMI AKTIF."
+    )
 
     while True:
 
@@ -974,41 +1336,53 @@ async def background_scanner(application):
                 application
             )
 
-            current_hour = datetime.now().hour
+            current_hour = (
+                datetime.now().hour
+            )
 
-            if current_hour != last_hour_report:
+            if (
+                current_hour
+                !=
+                last_hour_report
+            ):
 
                 if (
                     results
                     and
-                    TARGET_CHAT_ID is not None
+                    TARGET_CHAT_ID
                 ):
 
                     try:
 
                         await application.bot.send_message(
                             chat_id=TARGET_CHAT_ID,
-                            text=create_hourly_report(results)
+                            text=create_hourly_report(
+                                results
+                            )
                         )
 
                         safe_print(
-                            "Saatlik rapor gonderildi."
+                            "SAATLIK RAPOR GONDERILDI."
                         )
 
                     except Exception as e:
 
                         safe_print(
                             "Saatlik rapor hatasi:",
-                            type(e).__name__
+                            type(e).__name__,
+                            str(e)
                         )
 
-                last_hour_report = current_hour
+                last_hour_report = (
+                    current_hour
+                )
 
         except Exception as e:
 
             safe_print(
                 "Tarama sistemi hatasi:",
-                type(e).__name__
+                type(e).__name__,
+                str(e)
             )
 
         safe_print(
@@ -1019,6 +1393,10 @@ async def background_scanner(application):
             SCAN_MINUTES * 60
         )
 
+
+# ============================================================
+# /START
+# ============================================================
 
 async def start(
     update: Update,
@@ -1036,18 +1414,22 @@ async def start(
     )
 
 
+# ============================================================
+# /DURUM
+# ============================================================
+
 async def durum(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    if TARGET_CHAT_ID is None:
+    if TARGET_CHAT_ID:
 
-        chat_status = "❌ Tanimli degil"
+        chat_status = "🟢 Tanimli"
 
     else:
 
-        chat_status = "🟢 Tanimli"
+        chat_status = "❌ Tanimli degil"
 
     scanner_status = (
         "🟢 Calisiyor"
@@ -1067,6 +1449,10 @@ async def durum(
         "⏳ Cooldown: 30 dakika"
     )
 
+
+# ============================================================
+# /ANALIZ
+# ============================================================
 
 async def analiz(
     update: Update,
@@ -1093,21 +1479,28 @@ async def analiz(
             return
 
         await update.message.reply_text(
-            create_hourly_report(results)
+            create_hourly_report(
+                results
+            )
         )
 
     except Exception as e:
 
         safe_print(
             "Analiz komutu hatasi:",
-            type(e).__name__
+            type(e).__name__,
+            str(e)
         )
 
         await update.message.reply_text(
             "❌ Analiz sirasinda hata olustu.\n"
-            "CMD ekranini kontrol et."
+            "Actions ekranini kontrol et."
         )
 
+
+# ============================================================
+# /ID
+# ============================================================
 
 async def capture_chat_id(
     update: Update,
@@ -1116,7 +1509,9 @@ async def capture_chat_id(
 
     global TARGET_CHAT_ID
 
-    TARGET_CHAT_ID = update.effective_chat.id
+    TARGET_CHAT_ID = (
+        update.effective_chat.id
+    )
 
     await update.message.reply_text(
         "✅ BU SOHBET HEDEF OLARAK TANIMLANDI.\n\n"
@@ -1150,9 +1545,11 @@ async def gonder(
 
         return
 
-    message = " ".join(context.args)
+    message = " ".join(
+        context.args
+    )
 
-    if TARGET_CHAT_ID is None:
+    if not TARGET_CHAT_ID:
 
         await update.message.reply_text(
             "❌ Hedef kanal tanımlı değil."
@@ -1191,11 +1588,41 @@ async def gonder(
         )
 
 
-async def post_init(application):
+# ============================================================
+# POST INIT
+# ============================================================
 
-    safe_print("========================================")
-    safe_print("CRYPTO RADAR V5 BASLATILIYOR")
-    safe_print("========================================")
+async def post_init(
+    application
+):
+
+    safe_print(
+        "========================================"
+    )
+
+    safe_print(
+        "CRYPTO RADAR V5 BASLATILIYOR"
+    )
+
+    safe_print(
+        "========================================"
+    )
+
+    safe_print(
+        "HEDEF KANAL:",
+        TARGET_CHAT_ID
+    )
+
+    safe_print(
+        "TARAMA ARALIGI:",
+        SCAN_MINUTES,
+        "dakika"
+    )
+
+    safe_print(
+        "ANALIZ EDILECEK COIN:",
+        MAX_COINS
+    )
 
     if test_binance():
 
@@ -1210,9 +1637,19 @@ async def post_init(application):
         )
 
     asyncio.create_task(
-        background_scanner(application)
+        background_scanner(
+            application
+        )
     )
 
+    safe_print(
+        "ARKA PLAN SCANNER BASLATILDI."
+    )
+
+
+# ============================================================
+# MAIN
+# ============================================================
 
 def main():
 
@@ -1240,6 +1677,7 @@ def main():
         .build()
     )
 
+    # START
     app.add_handler(
         CommandHandler(
             "start",
@@ -1247,6 +1685,7 @@ def main():
         )
     )
 
+    # DURUM
     app.add_handler(
         CommandHandler(
             "durum",
@@ -1254,6 +1693,7 @@ def main():
         )
     )
 
+    # ANALIZ
     app.add_handler(
         CommandHandler(
             "analiz",
@@ -1261,6 +1701,7 @@ def main():
         )
     )
 
+    # ID
     app.add_handler(
         CommandHandler(
             "id",
@@ -1268,6 +1709,7 @@ def main():
         )
     )
 
+    # GONDER
     app.add_handler(
         CommandHandler(
             "gonder",
@@ -1275,9 +1717,18 @@ def main():
         )
     )
 
-    safe_print("========================================")
-    safe_print("       CRYPTO RADAR V5")
-    safe_print("========================================")
+    safe_print(
+        "========================================"
+    )
+
+    safe_print(
+        "       CRYPTO RADAR V5"
+    )
+
+    safe_print(
+        "========================================"
+    )
+
     safe_print(
         "Bot Telegram polling baslatiliyor..."
     )
@@ -1285,5 +1736,10 @@ def main():
     app.run_polling()
 
 
+# ============================================================
+# PROGRAM BASLANGICI
+# ============================================================
+
 if __name__ == "__main__":
+
     main()
