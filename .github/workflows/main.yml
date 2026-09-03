@@ -1,4 +1,3 @@
-```yaml
 name: Crypto Radar V5
 
 on:
@@ -28,4 +27,3 @@ jobs:
 
       - name: Run Crypto Radar V5
         run: python "bot - Kopya.py"
-```
