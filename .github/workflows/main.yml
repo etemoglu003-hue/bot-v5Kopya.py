@@ -1,9 +1,8 @@
+```yaml
 name: Crypto Radar V5
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/5 * * * *"
 
 jobs:
   run-bot:
@@ -29,3 +28,4 @@ jobs:
 
       - name: Run Crypto Radar V5
         run: python "bot - Kopya.py"
+```
