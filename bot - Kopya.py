@@ -1,4 +1,3 @@
-```python
 import asyncio
 import json
 import time
@@ -20,8 +19,6 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
 
 SCAN_MINUTES = 5
-
-# Daha hızlı tarama için 15 coin
 MAX_COINS = 15
 
 ALERT_COOLDOWN = 30 * 60
@@ -62,7 +59,6 @@ def safe_print(*args):
     except Exception:
 
         try:
-
             text = " ".join(
                 str(x)
                 for x in args
@@ -97,7 +93,6 @@ TARGET_CHAT_ID = (
 )
 
 last_hour_report = -1
-
 scanner_running = False
 
 
@@ -132,7 +127,6 @@ def get_json(url):
         ) as response:
 
             status_code = response.getcode()
-
             raw_data = response.read()
 
         safe_print(
@@ -718,7 +712,6 @@ def analyze_coin(
         )
 
         score = 0
-
         reasons = []
 
         # 15M
@@ -972,7 +965,6 @@ def analyze_coin(
                 )
 
         return {
-
             "symbol": symbol,
             "price": price,
             "change_15m": price_change_15m,
@@ -1004,7 +996,8 @@ def analyze_coin(
         safe_print(
             "Coin analiz hatasi:",
             symbol,
-            type(e).__name__
+            type(e).__name__,
+            str(e)
         )
 
         return None
@@ -1800,7 +1793,6 @@ def main():
         .build()
     )
 
-    # START
     app.add_handler(
         CommandHandler(
             "start",
@@ -1808,7 +1800,6 @@ def main():
         )
     )
 
-    # DURUM
     app.add_handler(
         CommandHandler(
             "durum",
@@ -1816,7 +1807,6 @@ def main():
         )
     )
 
-    # ANALIZ
     app.add_handler(
         CommandHandler(
             "analiz",
@@ -1824,7 +1814,6 @@ def main():
         )
     )
 
-    # ID
     app.add_handler(
         CommandHandler(
             "id",
@@ -1832,7 +1821,6 @@ def main():
         )
     )
 
-    # GONDER
     app.add_handler(
         CommandHandler(
             "gonder",
@@ -1864,6 +1852,4 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
-
     main()
-```
