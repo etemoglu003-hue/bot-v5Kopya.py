@@ -1,8 +1,10 @@
+```python
 import asyncio
 import json
 import time
 import urllib.request
 import urllib.parse
+import urllib.error
 import sys
 import os
 from datetime import datetime
@@ -85,7 +87,6 @@ def safe_print(*args):
 last_alerts = {}
 previous_oi = {}
 
-# GitHub Secret bos olsa bile kanal adresini kullan
 TARGET_CHAT_ID = (
     os.getenv(
         "TARGET_CHAT_ID",
@@ -113,26 +114,148 @@ def get_json(url):
         request = urllib.request.Request(
             url,
             headers={
-                "User-Agent": "CryptoRadarV5/1.0"
+                "User-Agent": (
+                    "Mozilla/5.0 "
+                    "(Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) "
+                    "Chrome/151.0.0.0 Safari/537.36"
+                ),
+                "Accept": "application/json",
+                "Connection": "close"
             }
         )
 
         with urllib.request.urlopen(
             request,
-            timeout=5
+            timeout=15
         ) as response:
 
+            status_code = response.getcode()
+
             raw_data = response.read()
+
+        safe_print(
+            "BINANCE HTTP:",
+            status_code,
+            url
+        )
 
         return json.loads(
             raw_data.decode("utf-8")
         )
 
+    except urllib.error.HTTPError as e:
+
+        safe_print(
+            "========================================"
+        )
+
+        safe_print(
+            "BINANCE HTTP HATASI"
+        )
+
+        safe_print(
+            "KOD:",
+            e.code
+        )
+
+        safe_print(
+            "SEBEP:",
+            e.reason
+        )
+
+        try:
+
+            error_body = e.read().decode(
+                "utf-8",
+                errors="replace"
+            )
+
+            safe_print(
+                "BINANCE CEVABI:",
+                error_body[:1000]
+            )
+
+        except Exception:
+
+            safe_print(
+                "BINANCE CEVABI OKUNAMADI."
+            )
+
+        safe_print(
+            "URL:",
+            url
+        )
+
+        safe_print(
+            "========================================"
+        )
+
+        return None
+
+    except urllib.error.URLError as e:
+
+        safe_print(
+            "========================================"
+        )
+
+        safe_print(
+            "BINANCE URL HATASI"
+        )
+
+        safe_print(
+            "SEBEP:",
+            str(e.reason)
+        )
+
+        safe_print(
+            "URL:",
+            url
+        )
+
+        safe_print(
+            "========================================"
+        )
+
+        return None
+
+    except TimeoutError:
+
+        safe_print(
+            "BINANCE BAGLANTI ZAMAN ASIMI."
+        )
+
+        safe_print(
+            "URL:",
+            url
+        )
+
+        return None
+
     except Exception as e:
+
+        safe_print(
+            "========================================"
+        )
 
         safe_print(
             "BINANCE VERI HATASI:",
             type(e).__name__
+        )
+
+        safe_print(
+            "DETAY:",
+            str(e)
+        )
+
+        safe_print(
+            "URL:",
+            url
+        )
+
+        safe_print(
+            "========================================"
         )
 
         return None
@@ -1743,3 +1866,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+```
